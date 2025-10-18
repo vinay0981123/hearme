@@ -1,0 +1,10 @@
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic
+requests
+faster-whisper
+whisperx==3.7.4
+pyannote.audio
+transformers[sentencepiece]
+huggingface-hub

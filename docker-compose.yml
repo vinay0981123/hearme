@@ -1,0 +1,14 @@
+services:
+
+  hear:
+    # image: myapp:latest
+    build: .
+    container_name: hear
+    # build: .
+    ports:
+      - "8005:8000"
+    networks:
+      - mynetwork
+networks:
+  mynetwork:
+    driver: bridge
