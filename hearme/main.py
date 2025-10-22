@@ -46,44 +46,54 @@ async def root():
 
 @app.post("/transcribe")
 async def transcribe_endpoint(req: TranscribeRequest):
-    # Use a per-request temp directory so nothing persists on disk after return
-    with tempfile.TemporaryDirectory(prefix="stt_tmp_") as tmpdir:
-        tmp_path = Path(tmpdir)
+    try:
+        # Use a per-request temp directory so nothing persists on disk after return
+        with tempfile.TemporaryDirectory(prefix="stt_tmp_") as tmpdir:
+            tmp_path = Path(tmpdir)
 
-        # derive extension from URL path (ignore query)
-        audio_url = str(req.s3_url)
-        parsed = urlparse(audio_url)
-        ext = Path(parsed.path).suffix or ".mp3"
+            # derive extension from URL path (ignore query)
+            audio_url = str(req.s3_url)
+            parsed = urlparse(audio_url)
+            ext = Path(parsed.path).suffix or ".mp3"
 
-        downloaded_path = tmp_path / ("input_audio" + ext)
-        # 1) download
-        try:
-            download_public_url(audio_url, str(downloaded_path))
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Failed to download audio: {e}")
+            downloaded_path = tmp_path / ("input_audio" + ext)
 
-        # 2) standardize to 16k mono WAV in the same temp folder
-        try:
-            standardized_path = standardize_audio(str(downloaded_path), str(tmp_path / "audio.wav"), sample_rate=16000)
-        except subprocess.CalledProcessError as e:
-            raise HTTPException(status_code=500, detail=f"Audio conversion failed: {e}")
-        except FileNotFoundError:
-            raise HTTPException(status_code=500, detail="ffmpeg not found on server. Please install ffmpeg.")
+            # 1) download
+            try:
+                download_public_url(audio_url, str(downloaded_path))
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Failed to download audio: {e}")
 
-        # 3) run blocking processing in threadpool
-        loop = asyncio.get_event_loop()
-        try:
-            result = await loop.run_in_executor(
-                executor,
-                _process_job,
-                str(standardized_path),
-                req.use_whisperx
-            )
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
+            # 2) standardize to 16k mono WAV in the same temp folder
+            try:
+                standardized_path = standardize_audio(
+                    str(downloaded_path), 
+                    str(tmp_path / "audio.wav"), 
+                    sample_rate=16000
+                )
+            except subprocess.CalledProcessError as e:
+                raise HTTPException(status_code=500, detail=f"Audio conversion failed: {e}")
+            except FileNotFoundError:
+                raise HTTPException(status_code=500, detail="ffmpeg not found on server. Please install ffmpeg.")
 
-        # Temp directory is auto-cleaned here (no files persist)
-        return result
+            # 3) run blocking processing in threadpool
+            loop = asyncio.get_event_loop()
+            try:
+                result = await loop.run_in_executor(
+                    executor,
+                    _process_job,
+                    str(standardized_path),
+                    req.use_whisperx
+                )
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Processing failed: {e}")
+
+            return result
+
+    except Exception as e:
+        # Catch any unexpected errors and log them
+        print("Unexpected error in /transcribe:", e)
+        raise HTTPException(status_code=500, detail=f"Unexpected server error: {e}")
 
 
 def _process_job(audio_path: str, use_whisperx: bool):

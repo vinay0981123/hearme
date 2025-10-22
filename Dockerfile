@@ -1,35 +1,37 @@
 # GPU-ready base image
 FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
 
+# Environment variables
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV HF_HOME=/workspace/.cache/huggingface
 ENV TORCH_HOME=/workspace/.cache/torch
 ENV PORT=8000
+ENV HF_HUB_ENABLE_HF_TRANSFER=0
 
-# System dependencies
+# Install system dependencies + full ffmpeg codecs
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
     ffmpeg git ca-certificates tzdata \
   && rm -rf /var/lib/apt/lists/*
 
-# Use /app for code to avoid being overwritten by RunPod's /workspace mount
+# Set working directory
 WORKDIR /app
 
 # Copy project files
 COPY hearme/ /app/hearme/
 COPY requirements.txt /app/requirements.txt
-COPY start.sh /app/start.sh
-RUN chmod +x /app/start.sh
 
-# Install dependencies
+# Upgrade pip and install Python dependencies
 RUN python -m pip install --upgrade pip
-RUN python -m pip install -r /app/requirements.txt
+RUN python -m pip install --no-cache-dir -r /app/requirements.txt
 
-# Create cache directories (on persistent volume)
+# Create persistent cache directories
 RUN mkdir -p /workspace/.cache/huggingface /workspace/.cache/torch \
     && chown -R 1000:1000 /workspace || true
 
-EXPOSE 8000
+# Expose port
+EXPOSE $PORT
 
-# Run the app
-CMD ["/app/start.sh"]
+# Run FastAPI app directly
+CMD ["uvicorn", "hearme.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

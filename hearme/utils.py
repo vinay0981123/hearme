@@ -12,11 +12,6 @@ logging.getLogger("torchaudio").setLevel(logging.WARNING)
 logging.getLogger("ffmpeg").setLevel(logging.WARNING)
 
 def standardize_audio(in_path: str, out_path: str = None, sample_rate: int = 16000) -> str:
-    """
-    Re-encode audio to WAV PCM16 mono @ sample_rate using ffmpeg.
-    Returns path to standardized file (out_path).
-    Requires ffmpeg installed on system.
-    """
     in_p = Path(in_path)
     if out_path is None:
         out_path = str(in_p.with_suffix(".wav"))
@@ -30,8 +25,12 @@ def standardize_audio(in_path: str, out_path: str = None, sample_rate: int = 160
         "-sample_fmt", "s16",
         str(out_path)
     ]
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"ffmpeg failed: {e.stderr}")
     return str(out_path)
+
 
 def download_public_url(url: str, dest_path: str, timeout: int = 120):
     dest = Path(dest_path)
